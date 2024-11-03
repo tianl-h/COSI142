@@ -1,0 +1,156 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sleep Quality Tracker</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', sans-serif;
+      background-color: #e0f7fa;
+      padding: 20px;
+      margin: 0;
+    }
+
+    section {
+      margin-bottom: 40px;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      font-size: 24px;
+      color: #00796b;
+      border-bottom: 2px solid #00796b;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      display: flex;
+      gap: 20px;
+      justify-content: space-between;
+    }
+
+    .card {
+      flex: 1;
+      padding: 20px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+
+    .card h3 {
+      font-size: 18px;
+      margin-bottom: 10px;
+      color: #00796b;
+    }
+
+    .card p {
+      font-size: 36px;
+      color: #009688;
+    }
+
+    .chart-container {
+      width: 100%;
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Section 1: Latest Sleep Quality -->
+  <section>
+    <h2>Latest Sleep Quality ({{ latest_data.date }})</h2>
+    <div class="container">
+      <div class="card">
+        <h3>Noise Events</h3>
+        <p id="noise-events">{{ latest_data.noise_events }}</p>
+      </div>
+      <div class="card">
+        <h3>Movement Events</h3>
+        <p id="movement-events">{{ latest_data.movement_events }}</p>
+      </div>
+      <div class="card">
+        <h3>Sleep Score</h3>
+        <p id="sleep-score">{{ latest_data.sleep_score }}</p>
+      </div>
+      <div class="card">
+        <h3>Duration</h3>
+        <p id="sleep-duration">{{ latest_data.monitoring_duration }}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 2: Sleep Score for the Past 7 Days -->
+  <section>
+    <h2>Sleep Score - Last 7 Days</h2>
+    <div class="chart-container">
+      <canvas id="sleepScoreChart7"></canvas>
+    </div>
+  </section>
+
+  <!-- Section 3: Sleep Score for the Past 30 Days -->
+  <section>
+    <h2>Sleep Score - Last 30 Days</h2>
+    <div class="chart-container">
+      <canvas id="sleepScoreChart30"></canvas>
+    </div>
+  </section>
+
+  <!-- Script for Dynamic Data and Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // Fetch and update data for the last 7 days
+    fetch('/api/last7days')
+      .then(response => response.json())
+      .then(data => {
+        updateChart(data, 'sleepScoreChart7');
+      });
+
+    // Fetch and update data for the last 30 days
+    fetch('/api/last30days')
+      .then(response => response.json())
+      .then(data => {
+        updateChart(data, 'sleepScoreChart30');
+      });
+
+    // Function to update the chart with new data
+    function updateChart(data, chartId) {
+      const ctx = document.getElementById(chartId).getContext('2d');
+      const labels = data.map(item => item.date);
+      const scores = data.map(item => item.sleep_score);
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Sleep Score',
+            data: scores,
+            borderColor: 'rgba(0, 150, 136, 1)',
+            backgroundColor: 'rgba(0, 150, 136, 0.1)',
+            borderWidth: 2,
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

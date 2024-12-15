@@ -1,10 +1,12 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sleep Quality Tracker</title>
+  <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: 'Helvetica Neue', sans-serif;
@@ -30,18 +32,23 @@
     }
 
     .container {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 20px;
-      justify-content: space-between;
+      margin: 20px 0;
     }
 
     .card {
-      flex: 1;
       padding: 20px;
       background: #ffffff;
       border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
       text-align: center;
+      transition: transform 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
     }
 
     .card h3 {
@@ -53,32 +60,112 @@
     .card p {
       font-size: 36px;
       color: #009688;
+      margin: 10px 0;
     }
 
     .chart-container {
       width: 100%;
-      max-width: 700px;
-      margin: 0 auto;
-      padding: 20px 0;
+      height: 300px;
+      margin: 20px 0;
+    }
+
+    .controls {
+      text-align: center;
+      margin: 30px 0 50px 0;
+    }
+
+    .button {
+      background: linear-gradient(135deg, #00796b 0%, #009688 100%);
+      color: white;
+      padding: 16px 36px;
+      border: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 121, 107, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .button:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        120deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      transition: 0.5s;
+    }
+
+    .button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(0, 121, 107, 0.3);
+      background: linear-gradient(135deg, #00695c 0%, #00796b 100%);
+    }
+
+    .button:hover:before {
+      left: 100%;
+    }
+
+    .button:active {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(0, 121, 107, 0.2);
+    }
+
+    .button:disabled {
+      background: linear-gradient(135deg, #b2dfdb 0%, #80cbc4 100%);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+      animation: pulse 2s infinite;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 12px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+      100% { transform: scale(1); }
     }
   </style>
 </head>
 <body>
-  <!-- Section 1: Latest Sleep Quality -->
   <section>
-    <h2>Latest Sleep Quality ({{ latest_data.date }})</h2>
+    <h2>Latest Sleep Session ({{ latest_data.session_datetime }})</h2>
     <div class="container">
       <div class="card">
-        <h3>Noise Events</h3>
-        <p id="noise-events">{{ latest_data.noise_events }}</p>
+        <h3>Acoustic Events</h3>
+        <p id="noise-events">{{ latest_data.acoustic_disturbances }}</p>
       </div>
       <div class="card">
         <h3>Movement Events</h3>
-        <p id="movement-events">{{ latest_data.movement_events }}</p>
+        <p id="movement-events">{{ latest_data.movement_activity }}</p>
       </div>
       <div class="card">
         <h3>Sleep Score</h3>
-        <p id="sleep-score">{{ latest_data.sleep_score }}</p>
+        <p id="sleep-score">{{ latest_data.sleep_quality_score }}</p>
       </div>
       <div class="card">
         <h3>Duration</h3>
@@ -87,51 +174,45 @@
     </div>
   </section>
 
-  <!-- Section 2: Sleep Score for the Past 7 Days -->
   <section>
-    <h2>Sleep Score - Last 7 Days</h2>
+    <h2>Recent Sleep Analysis (Last 7 Sessions)</h2>
     <div class="chart-container">
       <canvas id="sleepScoreChart7"></canvas>
     </div>
   </section>
 
-  <!-- Section 3: Sleep Score for the Past 30 Days -->
   <section>
-    <h2>Sleep Score - Last 30 Days</h2>
+    <h2>Extended Sleep Analysis (Last 30 Sessions)</h2>
     <div class="chart-container">
       <canvas id="sleepScoreChart30"></canvas>
     </div>
   </section>
 
-  <!-- Script for Dynamic Data and Charts -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <div id="root-monitoring-controls"></div>
+
   <script>
-    // Fetch and update data for the last 7 days
-    fetch('/api/last7days')
-      .then(response => response.json())
-      .then(data => {
-        updateChart(data, 'sleepScoreChart7');
-      });
+    function formatDateTime(dateTimeStr) {
+      if (!dateTimeStr) return '';
+      const date = new Date(dateTimeStr);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).replace(',', '');
+    }
 
-    // Fetch and update data for the last 30 days
-    fetch('/api/last30days')
-      .then(response => response.json())
-      .then(data => {
-        updateChart(data, 'sleepScoreChart30');
-      });
-
-    // Function to update the chart with new data
-    function updateChart(data, chartId) {
+    function createChart(data, chartId) {
       const ctx = document.getElementById(chartId).getContext('2d');
-      const labels = data.map(item => item.date);
-      const scores = data.map(item => item.sleep_score);
+      const labels = data.map(item => formatDateTime(item.session_datetime));
+      const scores = data.map(item => item.sleep_quality_score);
 
-      new Chart(ctx, {
+      return new Chart(ctx, {
         type: 'line',
         data: {
           labels: labels,
           datasets: [{
-            label: 'Sleep Score',
+            label: 'Sleep Quality Score',
             data: scores,
             borderColor: 'rgba(0, 150, 136, 1)',
             backgroundColor: 'rgba(0, 150, 136, 0.1)',
@@ -141,16 +222,112 @@
           }]
         },
         options: {
+          responsive: true,
           maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          },
           scales: {
             y: {
               beginAtZero: true,
-              max: 100
+              max: 100,
+              title: {
+                display: true,
+                text: 'Quality Score'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Session Time'
+              }
             }
           }
         }
       });
     }
+
+    const MonitoringControls = () => {
+      const [isProcessing, setIsProcessing] = React.useState(false);
+
+      const handleStartNewSession = async () => {
+        setIsProcessing(true);
+        try {
+          const killResponse = await fetch('/kill-monitoring', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+          
+          if (killResponse.ok) {
+            const startResponse = await fetch('/start-monitoring', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            });
+            
+            if (!startResponse.ok) {
+              throw new Error('Failed to start monitoring');
+            }
+          }
+        } catch (error) {
+          console.error('Error:', error);
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      return React.createElement(
+        'div',
+        { className: 'controls' },
+        React.createElement(
+          'button',
+          {
+            onClick: handleStartNewSession,
+            disabled: isProcessing,
+            className: 'button'
+          },
+          isProcessing 
+            ? [
+                React.createElement('span', { 
+                  className: 'loading',
+                  key: 'loading-spinner'
+                }),
+                React.createElement('span', {
+                  key: 'loading-text',
+                  style: { verticalAlign: 'middle' }
+                }, 'Starting New Session...')
+              ]
+            : 'Start New Monitoring Session'
+        )
+      );
+    };
+
+    window.addEventListener('load', () => {
+      const monitoringControlsContainer = document.getElementById('root-monitoring-controls');
+      if (monitoringControlsContainer) {
+        ReactDOM.render(React.createElement(MonitoringControls), monitoringControlsContainer);
+      }
+
+      fetch('/api/recent-sessions')
+        .then(response => response.json())
+        .then(data => createChart(data, 'sleepScoreChart7'))
+        .catch(error => console.error('Error loading recent sessions:', error));
+
+      fetch('/api/extended-analysis')
+        .then(response => response.json())
+        .then(data => createChart(data, 'sleepScoreChart30'))
+        .catch(error => console.error('Error loading extended analysis:', error));
+    });
   </script>
 </body>
 </html>
